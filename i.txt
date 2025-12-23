@@ -1,0 +1,370 @@
+// import express from "express";
+// import multer from "multer";
+// import cors from "cors";
+// import fs from "fs";
+// import dotenv from "dotenv";
+// import { GoogleGenAI } from "@google/genai";
+
+// dotenv.config();
+
+// const app = express();
+// app.use(cors());
+
+// const upload = multer({ dest: "uploads/" });
+
+// const genAI = new GoogleGenAI({
+//   apiKey: process.env.GEMINI_API_KEY,
+// });
+
+// app.post("/ai-check", upload.single("video"), async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ message: "No video uploaded" });
+//     }
+
+//     const filePath = req.file.path;
+//     const videoBytes = fs.readFileSync(filePath).toString("base64");
+
+//     const prompt = `
+// You are an experienced boxing coach.
+
+// Analyze the boxing training video.
+// Focus on:
+// - Guard position
+// - Stance and balance
+// - Punch technique
+// - Footwork
+
+// Give:
+// 1. Mistakes
+// 2. Improvements
+// 3. Beginner-friendly advice
+
+// Keep it simple and practical.
+// `;
+
+//     const result = await genAI.models.generateContent({
+//       model: "gemini-1.5-flash",
+//       contents: [
+//         {
+//           role: "user",
+//           parts: [
+//             {
+//               inlineData: {
+//                 mimeType: "video/mp4",
+//                 data: videoBytes,
+//               },
+//             },
+//             { text: prompt },
+//           ],
+//         },
+//       ],
+//     });
+
+//     fs.unlinkSync(filePath);
+
+//     const feedback =
+//       result.candidates[0].content.parts[0].text;
+
+//     res.json({ success: true, feedback });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({
+//       success: false,
+//       message: "AI analysis failed",
+//     });
+//   }
+// });
+
+// app.listen(process.env.PORT, () => {
+//   console.log(`Server running on port ${process.env.PORT}`);
+// });
+
+
+
+
+
+
+
+async function uploadAndRun() {
+  const localFilePath = path.join(process.cwd(), "myImg", "kajal.png");
+  console.log('1');
+  
+  const myFile = await ai.files.upload({
+    file: localFilePath,
+    config: { mimeType: "image/png" },
+  });
+console.log(myFile.uri);
+
+ const result = await ai.models.generateContent({
+  model: "gemini-2.5-flash",
+  contents: [
+    {
+      role: "user",
+      parts: [
+        {
+          fileData: {
+            fileUri: myFile.uri,
+            mimeType: "image/png",
+          },
+        },
+        {
+          text: "What is in this image?",
+        },
+      ],
+    },
+  ],
+});
+
+
+
+
+  console.log(result.text);
+}
+uploadAndRun();
+
+
+
+
+
+
+
+
+
+
+import express from "express";
+import multer from "multer";
+import cors from "cors";
+import fs from "fs";
+import dotenv from "dotenv";
+import { GoogleGenAI } from "@google/genai";
+import path from "path";
+
+dotenv.config();
+
+const app = express();
+app.use(cors());
+
+const upload = multer({ dest: "uploads/" });
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
+
+
+async function uploadAndRunVideo() {
+  const localFilePath = path.join(process.cwd(), "myVideo", "vid.mp4");
+
+  if (!fs.existsSync(localFilePath)) {
+    throw new Error("Video not found: " + localFilePath);
+  }
+  console.log("jjjjjjjjjjjjjjjj  "+localFilePath);
+  // D:\Code\React-expo\Boxer-ai\Boxer-ai-backend\myVideo\vid.mp4
+
+  // 1️⃣ Upload video
+  let file = await ai.files.upload({
+    file: localFilePath,
+    config: { mimeType: "video/mp4" },
+  });
+
+  console.log("Uploaded. Processing video...");
+
+  // 2️⃣ WAIT until video is processed
+  while (file.state !== "ACTIVE") {
+    await new Promise((r) => setTimeout(r, 2000));
+    file = await ai.files.get({ name: file.name });
+    console.log("Video state:", file.state);
+  }
+
+  console.log("Video ready. Running analysis...");
+
+  // 3️⃣ Analyze video
+  const result = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            fileData: {
+              fileUri: file.uri,
+              mimeType: "video/mp4",
+            },
+          },
+          {
+            text: `
+You are a professional boxing coach.
+Analyze this boxing video and give:
+1. Punching mistakes
+2. Footwork issues
+3. Defense problems
+4. 3 clear improvement tips
+Be concise and practical.
+            `,
+          },
+        ],
+      },
+    ],
+  });
+
+  console.log(result.text);
+}
+
+
+// uploadAndRunVideo().catch((err) => {
+//   console.error("Error during video upload and analysis:", err);
+// });
+
+
+app.post("/ai-check", upload.single("video"), async (req, res) => {
+  try {
+    console.log("REQ FILE:", req.file);
+
+    const absolutePath = path.resolve(req.file.path);
+    console.log("Saved file path:", absolutePath);
+    console.log("File exists:", fs.existsSync(absolutePath));
+
+    // ✅ ONLY THIS upload call
+    const file = await ai.files.upload({
+      file: absolutePath,
+      config: {
+        mimeType: req.file.mimetype || "video/mp4",
+      },
+    });
+
+    let activeFile = await ai.files.get(file.name);
+    while (activeFile.state === "PROCESSING") {
+      await new Promise((r) => setTimeout(r, 2000));
+      activeFile = await ai.files.get(file.name);
+    }
+
+    if (activeFile.state === "FAILED") {
+      throw new Error("Gemini video processing failed");
+    }
+
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              fileData: {
+                fileUri: activeFile.uri,
+                mimeType: activeFile.mimeType,
+              },
+            },
+            {
+              text:
+                "You are a boxing coach. Analyze this video and give clear feedback.",
+            },
+          ],
+        },
+      ],
+    });
+
+    // optional cleanup
+    // fs.unlinkSync(absolutePath);
+
+    res.json({ feedback: result.text });
+  } catch (err) {
+    console.error("ERROR:", err);
+    if (req.file) fs.unlinkSync(path.resolve(req.file.path));
+    res.status(500).json({ message: "AI analysis failed" });
+  }
+});
+
+
+
+// app.post("/ai-check", upload.single("video"), async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ message: "No video uploaded" });
+//     }
+
+//     console.log("File received, starting upload to Gemini...");
+
+//     // 1. Upload the file
+//     console.log("REQ FILE:", req.file);
+//     // Note: Use the path directly, the SDK handles the stream
+//     const file = await ai.files.upload(req.file.path, {
+//       // size: req.file.size,
+//       config: {
+//         mimeType: "video/mp4",
+//         // displayName: "Boxing Analysis Video",
+//         // size: req.file.size,
+//       },
+//     });
+
+//     console.log("GEMINI UPLOAD RESPONSE:", file);
+
+//     // 2. IMPORTANT: Wait for the video to be processed
+//     // Videos aren't usable immediately after upload
+//     let activeFile = await ai.files.get(file.name);
+//     while (activeFile.state === "PROCESSING") {
+//       process.stdout.write("."); // Progress indicator
+//       await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+//       activeFile = await ai.files.get(file.name);
+//     }
+
+//     if (activeFile.state === "FAILED") {
+//       throw new Error("Video processing failed on Google servers");
+//     }
+
+//     console.log("\nVideo is ACTIVE. Starting analysis...");
+
+//     // 3. Generate content using the active file URI
+//     const result = await ai.models.generateContent({
+//       model: "gemini-1.5-flash",
+//       contents: [
+//         {
+//           role: "user",
+//           parts: [
+//             {
+//               fileData: {
+//                 fileUri: activeFile.uri,
+//                 mimeType: activeFile.mimeType,
+//               },
+//             },
+//             {
+//               text: "You are an experienced boxing coach. Analyze the boxing training video. Focus on: Guard position, Stance and balance, Punch technique, and Footwork. Give: 1. Mistakes 2. Improvements 3. Beginner-friendly advice.",
+//             },
+//           ],
+//         },
+//       ],
+//     });
+
+//     // Clean up local storage
+//     fs.unlinkSync(req.file.path);
+
+//     res.json({
+//       success: true,
+//       feedback: result.text,
+//     });
+//   } catch (err) {
+//     console.error("ERROR DETAILS:", err);
+//     if (req.file) fs.unlinkSync(req.file.path); // Clean up on error
+//     res.status(500).json({ message: "AI analysis failed", error: err.message });
+//   }
+// });
+
+app.listen(5000, () => {
+  console.log("Server running on port 5000");
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
